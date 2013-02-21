@@ -22,3 +22,28 @@ librngd_a_SOURCES = fips.h fips.c
 
 EXTRA_DIST	= autogen.sh
 
+Android.mk: Makefile.am
+	/home/xyzz/Sources/androgenizer/androgenizer \
+		-:PROJECT rng-tools \
+		\
+		-:REL_TOP $(top_srcdir) -:ABS_TOP $(abs_top_srcdir) \
+		-:SHARED librngd \
+		-:TAGS optional \
+		-:CFLAGS $(DEFS) \
+		-:SOURCES $(librngd_a_SOURCES) \
+		\
+		-:REL_TOP $(top_srcdir) -:ABS_TOP $(abs_top_srcdir) \
+		-:TAGS optional \
+		-:EXECUTABLE rngd \
+		-:SOURCES $(rngd_SOURCES) \
+		-:CFLAGS $(DEFS) \
+		-:LDFLAGS -lrngd \
+		\
+		-:REL_TOP $(top_srcdir) -:ABS_TOP $(abs_top_srcdir) \
+		-:TAGS optional \
+		-:EXECUTABLE rngtest \
+		-:SOURCES $(rngtest_SOURCES) \
+		-:CFLAGS $(DEFS) \
+		-:LDFLAGS -lrngd \
+		\
+> $@
