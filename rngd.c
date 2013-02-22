@@ -414,7 +414,11 @@ int main(int argc, char **argv)
 	if (arguments->daemon) {
 		am_daemon = true;
 
-		if (daemon(0, 0) < 0) {
+		// android devices don't have /dev/null device
+		// we can either create it in init phase of phoneboot, or 
+		// enable noclose on daemon(3). The noclose fix is more 
+		// universal.
+		if (daemon(0, 1) < 0) {
 			if(!arguments->quiet)
 				fprintf(stderr, "can't daemonize: %s\n",
 				strerror(errno));
