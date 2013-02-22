@@ -1,3 +1,13 @@
+This Android branch of rng-tools provides version, taht is buildable in 
+android build tree.
+
+- argp.h is unavailable
+- /dev/null is unavailable
+- /var/run/ is unavailable
+
+Original README follows.
+
+--
 
 This is a random number generator daemon.
 
