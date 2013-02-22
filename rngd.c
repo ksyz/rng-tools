@@ -43,7 +43,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <string.h>
-#include <argp.h>
+#include <getopt.h>
 #include <syslog.h>
 #include <signal.h>
 
@@ -74,6 +74,17 @@ const char *argp_program_bug_address = PACKAGE_BUGREPORT;
 
 static char doc[] =
 	"Check and feed random data from hardware device to kernel entropy pool.\n";
+
+#ifndef _ARGP_H
+struct argp_option {
+	const char *name;
+	int key;
+	const char *arg;
+	int flags;
+	const char *doc;
+	int group;
+};
+#endif
 
 static struct argp_option options[] = {
 	{ "foreground",	'f', 0, 0, "Do not fork and become a daemon" },
@@ -143,68 +154,122 @@ struct rng *rng_list;
 /*
  * command line processing
  */
-static error_t parse_opt (int key, char *arg, struct argp_state *state)
-{
-	switch(key) {
-	case 'o':
-		arguments->random_name = arg;
-		break;
-	case 'p':
-		arguments->pid_file = arg;
-		break;
-	case 'r':
-		rng_default.rng_name = arg;
-		break;
-	case 'f':
-		arguments->daemon = false;
-		break;
-	case 'b':
-		arguments->daemon = true;
-		break;
-	case 's':
-		if (sscanf(arg, "%i", &arguments->random_step) == 0)
-			argp_usage(state);
-		break;
-	case 'W': {
-		int n;
-		if ((sscanf(arg, "%i", &n) == 0) || (n < 0) || (n > 4096))
-			argp_usage(state);
-		else
-			arguments->fill_watermark = n;
-		break;
-	}
-	case 'q':
-		arguments->quiet = true;
-		break;
-	case 'v':
-		arguments->verbose = true;
-		break;
-	case 'd': {
-		int n;
-		if ((sscanf(arg,"%i", &n) == 0) || ((n | 1)!=1))
-			argp_usage(state);
-		else
-			arguments->enable_drng = false;
-		break;
-	}
-	case 'n': {
-		int n;
-		if ((sscanf(arg,"%i", &n) == 0) || ((n | 1)!=1))
-			argp_usage(state);
-		else
-			arguments->enable_tpm = false;
-		break;
-	}
+static struct option long_options[] = {
+	{"foreground",		no_argument, 		NULL, 'f' },
+	{"background",		no_argument, 		NULL, 'b' },
+	{"random-device", 	required_argument, 	NULL, 'o' },
+	{"rng-device", 		required_argument, 	NULL, 'r' },
+	{"pid-file", 		required_argument, 	NULL, 'p' },
+	{"random-step", 	required_argument, 	NULL, 's' },
+	{"fill-watermark", 	required_argument,	NULL, 'W' },
+	{"quiet",		no_argument,		NULL, 'q' },
+	{"verbose",		no_argument,		NULL, 'v' },
+	{"no-drng",		required_argument,	NULL, 'd' },
+	{"no-tpm", 		required_argument,	NULL, 'n' },
+	{"version", 		no_argument,		NULL, 'V' },
+	{"help", 		no_argument,		NULL, 'h' },
+	{0, 0, 0, 0 }
+};
 
-	default:
-		return ARGP_ERR_UNKNOWN;
-	}
+void opt_usage(int key) {
+	int i = 0;
+	for (; i < sizeof(options); i++) {
+		if (options[i].name == (unsigned int) 0)
+			break;
 
-	return 0;
+		if (key != 0 && options[i].key == key) {
+			fputs(options[i].name, stderr);
+			return;
+		}
+		else {
+			printf("\t--%s,-%c\t%s\n", options[i].name, options[i].key, options[i].doc);
+		}
+	}
 }
 
-static struct argp argp = { options, parse_opt, NULL, doc };
+void print_doc() {
+	puts(doc);
+}
 
+void print_version() {
+	puts(argp_program_version);
+}
+
+static int parse_opts (int argc, char **argv) {
+	int c;
+	int option_index = 0;
+
+	while (1) {
+		c = getopt_long(argc, argv, "fbo:r:p:s:W:qvd:n:hV",
+			long_options, &option_index);
+
+		if (c == -1)
+			break;
+
+		switch(c) {
+		case 'o':
+			arguments->random_name = optarg;
+			break;
+		case 'p':
+			arguments->pid_file = optarg;
+			break;
+		case 'r':
+			rng_default.rng_name = optarg;
+			break;
+		case 'f':
+			arguments->daemon = false;
+			break;
+		case 'b':
+			arguments->daemon = true;
+			break;
+		case 's':
+			if (sscanf(optarg, "%i", &arguments->random_step) == 0)
+				opt_usage(c);
+			break;
+		case 'W': {
+			int n;
+			if ((sscanf(optarg, "%i", &n) == 0) || (n < 0) || (n > 4096))
+				opt_usage(c);
+			else
+				arguments->fill_watermark = n;
+			break;
+		}
+		case 'q':
+			arguments->quiet = true;
+			break;
+		case 'v':
+			arguments->verbose = true;
+			break;
+		case 'd': {
+			int n;
+			if ((sscanf(optarg, "%i", &n) == 0) || ((n | 1)!=1))
+				opt_usage(c);
+			else
+				arguments->enable_drng = false;
+			break;
+		}
+		case 'n': {
+			int n;
+			if ((sscanf(optarg, "%i", &n) == 0) || ((n | 1)!=1))
+				opt_usage(c);
+			else
+				arguments->enable_tpm = false;
+			break;
+		}
+		case 'V':
+			print_version();
+			exit(EXIT_SUCCESS);
+		case 'h':
+			print_doc();
+			opt_usage(0);
+			exit(EXIT_SUCCESS);
+		case '?':
+		default:
+			return 1;
+		}
+	}
+	return 0;
+}
 
 static int update_kernel_random(int random_step,
 	unsigned char *buf, fips_ctx_t *fipsctx_in)
@@ -303,7 +368,7 @@ int main(int argc, char **argv)
 	arguments->fill_watermark = default_watermark();
 
 	/* Parsing of commandline parameters */
-	argp_parse(&argp, argc, argv, 0, 0, arguments);
+	parse_opts(argc, argv);	
 
 	/* Init entropy sources, and open TRNG device */
 	if (arguments->enable_drng)
