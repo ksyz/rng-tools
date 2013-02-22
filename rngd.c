@@ -98,7 +98,7 @@ static struct argp_option options[] = {
 	  "Kernel device used for random number input (default: /dev/hwrng)" },
 
 	{ "pid-file", 'p', "file", 0,
-	  "File used for recording daemon PID, and multiple exclusion (default: /var/run/rngd.pid)" },
+	  "File used for recording daemon PID, and multiple exclusion (default: /tmp/rngd.pid)" },
 
 	{ "random-step", 's', "nnn", 0,
 	  "Number of bytes written to random-device at a time (default: 64)" },
@@ -121,7 +121,9 @@ static struct argp_option options[] = {
 
 static struct arguments default_arguments = {
 	.random_name	= "/dev/random",
-	.pid_file	= "/var/run/rngd.pid",
+	// Android doesn't have /var/run, for now, /tmp is best place 
+	// I did come up with
+	.pid_file	= "/tmp/rngd.pid", 
 	.random_step	= 64,
 	.daemon		= true,
 	.enable_drng	= true,
