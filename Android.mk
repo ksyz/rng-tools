@@ -43,6 +43,8 @@ include $(CLEAR_VARS)
 
 LOCAL_MODULE:=rngtest
 
+LOCAL_MODULE_TAGS:=optional 
+
 LOCAL_SRC_FILES := \
 	stats.c \
 	rngtest.c
@@ -55,3 +57,4 @@ LOCAL_CFLAGS := \
 
 LOCAL_PRELINK_MODULE := false
 include $(BUILD_EXECUTABLE)
+

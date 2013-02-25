@@ -36,8 +36,10 @@
 #include <sys/time.h>
 #include <time.h>
 #include <string.h>
-#include <argp.h>
+#include <getopt.h>
 #include <signal.h>
+#include <errno.h>
+#include <sys/types.h>
 
 #include "fips.h"
 #include "stats.h"
@@ -57,7 +59,6 @@ const char *argp_program_version =
 	"warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.";
 
 const char *argp_program_bug_address = PACKAGE_BUGREPORT;
-error_t argp_err_exit_status = EXIT_USAGE;
 
 static char doc[] =
 	"Check the randomness of data using FIPS 140-2 RNG tests.\n"
@@ -66,6 +67,17 @@ static char doc[] =
 	"and messages are sent to stderr.\n\n"
 	"If no errors happen nor any blocks fail the FIPS tests, the program will return "
 	"exit status 0.  If any blocks fail the tests, the exit status will be 1.\n";
+
+#ifndef _ARGP_H
+struct argp_option {
+	const char *name;
+	int key;
+	const char *arg;
+	int flags;
+	const char *doc;
+	int group;
+};
+#endif
 
 static struct argp_option options[] = {
 	{ "blockcount", 'c', "n", 0,
@@ -83,6 +95,16 @@ static struct argp_option options[] = {
 	{ 0 },
 };
 
+static struct option long_options[] = {
+	{"blockcount",		required_argument,	NULL, 'c' },
+	{"pipe",		required_argument,	NULL, 'p' },
+	{"timedstats",		required_argument, 	NULL, 't' },
+	{"blockstats", 		required_argument, 	NULL, 'b' },
+	{"help", 		no_argument, 		NULL, 'h' },
+	{"version", 		no_argument, 		NULL, 'v' },
+	{0, 0, 0, 0 }
+};
+
 struct arguments {
 	int blockstats;
 	uint64_t timedstats;		/* microseconds */
@@ -97,42 +119,85 @@ static struct arguments default_arguments = {
 	.blockcount	= 0,
 };
 
-static error_t parse_opt (int key, char *arg, struct argp_state *state)
-{
-	struct arguments *arguments = state->input;
+/* Command line arguments and processing */
+struct arguments *arguments = &default_arguments;
 
-	switch(key) {
-	case 'c': {
-		int n;
-		if ((sscanf(arg, "%i", &n) == 0) || (n < 0))
-			argp_usage(state);
-		else
-			arguments->blockcount = n;
-		break;
-	}
-	case 'b': {
-		int n;
-		if ((sscanf(arg, "%i", &n) == 0) || (n < 0))
-			argp_usage(state);
-		else
-			arguments->blockstats = n;
-		break;
-	}
-	case 't': {
-		int n;
-		if ((sscanf(arg, "%i", &n) == 0) || (n < 0))
-			argp_usage(state);
-		else
-			arguments->timedstats = 1000000ULL * n;
-		break;
-	}
+void opt_usage(int key) {
+	int i = 0;
+	for (; i < sizeof(options); i++) {
+		if (options[i].name == (unsigned int) 0)
+			break;
 
-	case 'p':
-		arguments->pipemode = 1;
-		break;
+		if (key != 0 && options[i].key == key) {
+			fputs(options[i].name, stderr);
+			return;
+		}
+		else {
+			printf("\t--%s,-%c\t%s\n", options[i].name, options[i].key, options[i].doc);
+		}
+	}
+}
 
-	default:
-		return ARGP_ERR_UNKNOWN;
+void print_doc() {
+	puts(doc);
+}
+
+void print_version() {
+	puts(argp_program_version);
+}
+
+static int parse_opts (int argc, char **argv) {
+	int c;
+	int option_index = 0;
+
+	while (1) {
+		c = getopt_long(argc, argv, "p:b:t:c:hv",
+			long_options, &option_index);
+
+		if (c == -1)
+			break;
+
+
+		switch(c) {
+		case 'c': {
+			int n;
+			if ((sscanf(optarg, "%i", &n) == 0) || (n < 0))
+				opt_usage(c);
+			else
+				arguments->blockcount = n;
+			break;
+		}
+		case 'b': {
+			int n;
+			if ((sscanf(optarg, "%i", &n) == 0) || (n < 0))
+				opt_usage(c);
+			else
+				arguments->blockstats = n;
+			break;
+		}
+		case 't': {
+			int n;
+			if ((sscanf(optarg, "%i", &n) == 0) || (n < 0))
+				opt_usage(c);
+			else
+				arguments->timedstats = 1000000ULL * n;
+			break;
+		}
+
+		case 'p':
+			arguments->pipemode = 1;
+			break;
+		case 'v':
+			print_version();
+			exit(EXIT_SUCCESS);
+		case 'h':
+			print_doc();
+			opt_usage(0);
+			exit(EXIT_SUCCESS);
+		case '?':
+		default:
+			return 1;
+		}
 	}
 
 	return 0;
@@ -167,10 +232,6 @@ struct {
 /* Logic and contexts */
 static fips_ctx_t fipsctx;		/* Context for the FIPS tests */
 static int exitstatus = EXIT_SUCCESS;	/* Exit status */
-
-/* Command line arguments and processing */
-struct arguments *arguments = &default_arguments;
-static struct argp argp = { options, parse_opt, NULL, doc };
 
 /* signals */
 static volatile int gotsigterm = 0;	/* Received SIGTERM/SIGINT */
@@ -394,8 +455,8 @@ static void do_rng_fips_test_loop( void )
 
 int main(int argc, char **argv)
 {
-	argp_parse(&argp, argc, argv, 0, 0, arguments);
-
+	parse_opts(argc, argv);
+	
 	if (!arguments->pipemode)
 		fprintf(stderr, "%s\n\n",
 			argp_program_version);
